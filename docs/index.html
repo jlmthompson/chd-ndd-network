@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHD–NDD Network Explorer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           background: #0f1117; color: #e8eaf6; height: 100vh; display: flex; flex-direction: column; }
+
+    header {
+      background: #1a1d2e; border-bottom: 1px solid #2d3154;
+      padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; color: #fff; }
+    header p  { font-size: 0.78rem; color: #8892b0; }
+
+    .controls {
+      background: #1a1d2e; border-bottom: 1px solid #2d3154;
+      padding: 10px 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; flex-shrink: 0;
+    }
+    .search-wrap { position: relative; }
+    #search {
+      background: #252840; border: 1px solid #3d4266; color: #e8eaf6;
+      padding: 6px 12px; border-radius: 6px; width: 220px; font-size: 0.85rem;
+    }
+    #search:focus { outline: none; border-color: #7c83d3; }
+
+    .filter-group { display: flex; gap: 6px; align-items: center; }
+    .filter-group label { font-size: 0.78rem; color: #8892b0; }
+    select, button {
+      background: #252840; border: 1px solid #3d4266; color: #e8eaf6;
+      padding: 5px 10px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;
+    }
+    button:hover { background: #3d4266; }
+    button.active { background: #7c83d3; border-color: #7c83d3; }
+
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    #cy { flex: 1; }
+
+    #panel {
+      width: 300px; background: #1a1d2e; border-left: 1px solid #2d3154;
+      overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column;
+    }
+    .panel-header {
+      padding: 14px 16px 10px; border-bottom: 1px solid #2d3154;
+      font-size: 0.82rem; color: #8892b0;
+    }
+    #panel-content { padding: 14px 16px; flex: 1; }
+    #panel-content .empty { color: #4a5080; font-size: 0.85rem; line-height: 1.6; }
+
+    .node-detail h2 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+    .node-detail .subtitle { font-size: 0.78rem; color: #8892b0; margin-bottom: 12px; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 0.72rem; font-weight: 600; margin: 2px;
+    }
+    .badge-chd   { background: #4a1a1a; color: #e74c3c; }
+    .badge-ndd   { background: #1a2d4a; color: #3498db; }
+    .badge-autism{ background: #1a3a2a; color: #2ecc71; }
+    .badge-overlap{ background: #2d1a3d; color: #9b59b6; }
+    .badge-green { background: #1a3a2a; color: #27ae60; }
+    .badge-amber { background: #3a2a0a; color: #f39c12; }
+
+    .detail-section { margin-top: 14px; }
+    .detail-section h3 { font-size: 0.75rem; text-transform: uppercase;
+                         letter-spacing: 0.08em; color: #8892b0; margin-bottom: 6px; }
+    .detail-section p, .detail-section li {
+      font-size: 0.82rem; color: #c8cde8; line-height: 1.5;
+    }
+    .detail-section ul { padding-left: 14px; }
+    .detail-section li { margin-bottom: 3px; }
+    .ext-link { color: #7c83d3; text-decoration: none; font-size: 0.8rem; }
+    .ext-link:hover { text-decoration: underline; }
+
+    .legend {
+      padding: 12px 16px; border-top: 1px solid #2d3154;
+      font-size: 0.75rem; flex-shrink: 0;
+    }
+    .legend h3 { color: #8892b0; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+    #stats-bar {
+      background: #151824; border-top: 1px solid #2d3154;
+      padding: 5px 20px; font-size: 0.72rem; color: #4a5080; flex-shrink: 0;
+    }
+
+    .loading {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      color: #8892b0; font-size: 0.9rem; text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>CHD–NDD Network Explorer</h1>
+    <p>Congenital Heart Disease &amp; Neurodevelopmental Disorder gene–phenotype network</p>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="search-wrap">
+    <input id="search" type="text" placeholder="Search gene or phenotype…">
+  </div>
+
+  <div class="filter-group">
+    <label>Show:</label>
+    <button id="btn-all" class="active" onclick="setFilter('all')">All genes</button>
+    <button id="btn-overlap" onclick="setFilter('overlap')">CHD+NDD overlap only</button>
+    <button id="btn-chd" onclick="setFilter('chd')">CHD only</button>
+    <button id="btn-ndd" onclick="setFilter('ndd')">NDD only</button>
+  </div>
+
+  <div class="filter-group">
+    <label>Confidence:</label>
+    <select id="conf-filter" onchange="applyFilters()">
+      <option value="all">Green + Amber</option>
+      <option value="green">Green only</option>
+    </select>
+  </div>
+
+  <div class="filter-group">
+    <label>Nodes:</label>
+    <select id="type-filter" onchange="applyFilters()">
+      <option value="all">Genes + Phenotypes</option>
+      <option value="genes">Genes only</option>
+    </select>
+  </div>
+
+  <button onclick="cy.fit(); cy.zoom(cy.zoom() * 0.85)">⊡ Reset view</button>
+</div>
+
+<div class="main">
+  <div id="cy">
+    <div class="loading" id="loading">Loading network…</div>
+  </div>
+
+  <div id="panel">
+    <div class="panel-header">Node details</div>
+    <div id="panel-content">
+      <div class="empty">
+        Click any node to see details.<br><br>
+        <b>Purple</b> nodes are genes appearing in both CHD and NDD panels — the overlap zone.<br><br>
+        Use the filters above to focus on specific subsets.
+      </div>
+    </div>
+    <div class="legend">
+      <h3>Legend</h3>
+      <div class="legend-item"><div class="dot" style="background:#9b59b6"></div><span>Gene — CHD + NDD overlap</span></div>
+      <div class="legend-item"><div class="dot" style="background:#e74c3c"></div><span>Gene — CHD only</span></div>
+      <div class="legend-item"><div class="dot" style="background:#3498db"></div><span>Gene — NDD / ID only</span></div>
+      <div class="legend-item"><div class="dot" style="background:#2ecc71"></div><span>Gene — Autism only</span></div>
+      <div class="legend-item"><div class="dot" style="background:#e8a49c"></div><span>CHD phenotype</span></div>
+      <div class="legend-item"><div class="dot" style="background:#a8c8e8"></div><span>NDD phenotype</span></div>
+      <div class="legend-item"><div class="dot" style="background:#f1c40f"></div><span>Variant (ClinVar P/LP)</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="stats-bar">Loading stats…</div>
+
+<script>
+let cy, allElements, currentFilter = 'all';
+
+async function init() {
+  const resp = await fetch('../data/processed/graph.json');
+  const data = await resp.json();
+  document.getElementById('loading').remove();
+
+  const s = data.stats;
+  document.getElementById('stats-bar').textContent =
+    `${s.genes.toLocaleString()} genes  ·  ${s.phenotypes.toLocaleString()} phenotypes  ·  ` +
+    `${s.variants.toLocaleString()} variants  ·  ${s.overlap_genes} CHD+NDD overlap genes  ·  ` +
+    `${s.total_edges.toLocaleString()} connections`;
+
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: data.elements,
+    style: [
+      {
+        selector: 'node',
+        style: {
+          'background-color': 'data(colour)',
+          'label': 'data(label)',
+          'font-size': '9px',
+          'color': '#e8eaf6',
+          'text-valign': 'center',
+          'text-halign': 'right',
+          'text-margin-x': '4px',
+          'text-outline-color': '#0f1117',
+          'text-outline-width': '1.5px',
+          'width': function(ele) {
+            const t = ele.data('type');
+            if (t === 'gene') return ele.data('is_overlap') ? 18 : 12;
+            if (t === 'variant') return 8;
+            return 10;
+          },
+          'height': function(ele) {
+            const t = ele.data('type');
+            if (t === 'gene') return ele.data('is_overlap') ? 18 : 12;
+            if (t === 'variant') return 8;
+            return 10;
+          },
+          'shape': function(ele) {
+            const t = ele.data('type');
+            if (t === 'variant') return 'diamond';
+            if (t.includes('phenotype')) return 'round-rectangle';
+            return 'ellipse';
+          },
+          'border-width': function(ele) { return ele.data('is_overlap') ? 2.5 : 0; },
+          'border-color': '#fff',
+          'opacity': 0.9,
+        }
+      },
+      {
+        selector: 'node:selected',
+        style: { 'border-width': 3, 'border-color': '#fff', 'opacity': 1 }
+      },
+      {
+        selector: 'edge',
+        style: {
+          'line-color': 'data(colour)',
+          'width': 0.8,
+          'opacity': 0.4,
+          'curve-style': 'haystack',
+        }
+      },
+      {
+        selector: '.highlighted',
+        style: { 'opacity': 1, 'line-color': '#fff', 'width': 2 }
+      },
+      { selector: '.faded', style: { 'opacity': 0.08 } },
+    ],
+    layout: {
+      name: 'cose',
+      animate: false,
+      randomize: true,
+      nodeRepulsion: 400000,
+      idealEdgeLength: 60,
+      edgeElasticity: 60,
+      gravity: 1.2,
+      numIter: 1000,
+    }
+  });
+
+  allElements = cy.elements();
+
+  // Click handler
+  cy.on('tap', 'node', function(evt) {
+    const n = evt.target;
+    showPanel(n);
+    // Highlight neighbourhood
+    cy.elements().addClass('faded').removeClass('highlighted');
+    n.removeClass('faded').addClass('highlighted');
+    n.neighborhood().removeClass('faded').addClass('highlighted');
+  });
+
+  cy.on('tap', function(evt) {
+    if (evt.target === cy) {
+      cy.elements().removeClass('faded highlighted');
+      document.getElementById('panel-content').innerHTML =
+        '<div class="empty">Click any node to see details.</div>';
+    }
+  });
+
+  // Search
+  document.getElementById('search').addEventListener('input', function() {
+    const q = this.value.toLowerCase().trim();
+    if (!q) { cy.elements().removeClass('faded highlighted'); return; }
+    cy.elements().addClass('faded').removeClass('highlighted');
+    cy.nodes().filter(n =>
+      n.data('label').toLowerCase().includes(q) ||
+      (n.data('full_name')||'').toLowerCase().includes(q)
+    ).removeClass('faded').addClass('highlighted')
+     .neighborhood().removeClass('faded');
+  });
+}
+
+function showPanel(n) {
+  const d = n.data();
+  let html = `<div class="node-detail">`;
+  html += `<h2>${d.label}</h2>`;
+
+  if (d.type === 'gene') {
+    html += `<p class="subtitle">${d.full_name || ''}</p>`;
+    // Badges
+    if (d.has_chd && d.has_ndd) html += `<span class="badge badge-overlap">CHD + NDD overlap</span>`;
+    else if (d.has_chd) html += `<span class="badge badge-chd">Congenital Heart Defect</span>`;
+    if (d.has_ndd) html += `<span class="badge badge-ndd">Intellectual Disability</span>`;
+    if (d.panels && d.panels.includes('Autism')) html += `<span class="badge badge-autism">Autism</span>`;
+    html += `<br><span class="badge badge-${d.confidence.toLowerCase()}">${d.confidence} evidence</span>`;
+
+    if (d.moi) {
+      html += `<div class="detail-section"><h3>Mode of Inheritance</h3><p>${d.moi}</p></div>`;
+    }
+    if (d.phenotypes && d.phenotypes.length > 0) {
+      html += `<div class="detail-section"><h3>Associated Phenotypes</h3><ul>`;
+      d.phenotypes.slice(0,8).forEach(p => {
+        const mim = p.mim ? ` <a class="ext-link" href="https://omim.org/entry/${p.mim}" target="_blank">OMIM ↗</a>` : '';
+        html += `<li>${p.label}${mim}</li>`;
+      });
+      html += `</ul></div>`;
+    }
+    if (d.variant_count > 0) {
+      html += `<div class="detail-section"><h3>ClinVar P/LP Variants</h3>
+        <p>${d.variant_count} pathogenic/likely pathogenic variant${d.variant_count > 1 ? 's' : ''}</p></div>`;
+    }
+    // External links
+    html += `<div class="detail-section"><h3>Links</h3>`;
+    if (d.hgnc_id) html += `<a class="ext-link" href="https://www.genenames.org/data/gene-symbol-report/#!/hgnc_id/${d.hgnc_id}" target="_blank">HGNC ↗</a>  `;
+    if (d.omim_gene && d.omim_gene.length > 0) html += `<a class="ext-link" href="https://omim.org/entry/${d.omim_gene[0]}" target="_blank">OMIM ↗</a>  `;
+    html += `<a class="ext-link" href="https://www.ncbi.nlm.nih.gov/clinvar/?term=${d.label}[gene]" target="_blank">ClinVar ↗</a>  `;
+    html += `<a class="ext-link" href="https://gnomad.broadinstitute.org/gene/${d.label}" target="_blank">gnomAD ↗</a>`;
+    html += `</div>`;
+
+  } else if (d.type.includes('phenotype')) {
+    html += `<p class="subtitle">${d.type === 'chd_phenotype' ? 'CHD Phenotype' : 'NDD Phenotype'}</p>`;
+    if (d.mim) {
+      html += `<div class="detail-section"><h3>OMIM</h3>
+        <a class="ext-link" href="https://omim.org/entry/${d.mim}" target="_blank">MIM# ${d.mim} ↗</a></div>`;
+    }
+    const connected_genes = n.neighborhood('node[type="gene"]').map(g => g.data('label')).sort();
+    if (connected_genes.length > 0) {
+      html += `<div class="detail-section"><h3>Associated Genes (${connected_genes.length})</h3><p>${connected_genes.join(', ')}</p></div>`;
+    }
+
+  } else if (d.type === 'variant') {
+    html += `<p class="subtitle">${d.clinsig}</p>`;
+    if (d.conditions && d.conditions.length > 0) {
+      html += `<div class="detail-section"><h3>Condition(s)</h3><ul>`;
+      d.conditions.forEach(c => { if (c) html += `<li>${c}</li>`; });
+      html += `</ul></div>`;
+    }
+    if (d.accession) {
+      html += `<div class="detail-section"><h3>Link</h3>
+        <a class="ext-link" href="https://www.ncbi.nlm.nih.gov/clinvar/variation/${d.accession}/" target="_blank">ClinVar ↗</a></div>`;
+    }
+  }
+
+  html += `</div>`;
+  document.getElementById('panel-content').innerHTML = html;
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  ['all','overlap','chd','ndd'].forEach(x =>
+    document.getElementById('btn-'+x).classList.toggle('active', x === f));
+  applyFilters();
+}
+
+function applyFilters() {
+  const conf   = document.getElementById('conf-filter').value;
+  const typeF  = document.getElementById('type-filter').value;
+
+  cy.elements().removeClass('faded highlighted');
+
+  let hidden = cy.collection();
+
+  cy.nodes().filter(n => {
+    const d = n.data();
+    if (d.type === 'gene') {
+      if (currentFilter === 'overlap' && !d.is_overlap) return true;
+      if (currentFilter === 'chd'     && !d.has_chd)    return true;
+      if (currentFilter === 'ndd'     && !d.has_ndd)    return true;
+      if (conf === 'green' && d.confidence !== 'Green')  return true;
+    }
+    if (typeF === 'genes' && d.type !== 'gene') return true;
+    return false;
+  }).addClass('faded');
+}
+
+init().catch(err => {
+  document.getElementById('loading').textContent = 'Error loading data: ' + err.message;
+  console.error(err);
+});
+</script>
+</body>
+</html>
