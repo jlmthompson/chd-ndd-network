@@ -120,8 +120,8 @@
 
   <div class="filter-group">
     <label>Panel:</label>
-    <button id="btn-all" class="active" onclick="setFilter('all')">All genes</button>
-    <button id="btn-overlap" onclick="setFilter('overlap')">CHD+NDD overlap</button>
+    <button id="btn-all" onclick="setFilter('all')">All genes</button>
+    <button id="btn-overlap" class="active" onclick="setFilter('overlap')">CHD+NDD overlap</button>
     <button id="btn-chd" onclick="setFilter('chd')">CHD only</button>
     <button id="btn-ndd" onclick="setFilter('ndd')">NDD only</button>
   </div>
@@ -138,7 +138,7 @@
     <label>View:</label>
     <select id="type-filter" onchange="applyFilters()">
       <option value="genes">Genes only</option>
-      <option value="all">Genes + Phenotypes</option>
+      <option value="all" selected>Genes + Phenotypes</option>
     </select>
   </div>
 
@@ -184,7 +184,7 @@
 <div id="stats-bar">Loading…</div>
 
 <script>
-let cy, graphData, currentFilter = 'all', showVariants = false;
+let cy, graphData, currentFilter = 'overlap', showVariants = false;
 
 function setLoading(msg) {
   const ol = document.getElementById('loading-overlay');
@@ -340,9 +340,12 @@ function renderGraph() {
 
     const nCount = elements.nodes.length;
     const eCount = elements.edges.length;
+    const geneCount = elements.nodes.filter(n => n.data.type === 'gene').length;
+    const phenoCount = elements.nodes.filter(n => n.data.type && n.data.type.includes('phenotype')).length;
     document.getElementById('stats-bar').textContent =
-      `Showing ${nCount.toLocaleString()} nodes · ${eCount.toLocaleString()} edges  ·  ` +
-      `${graphData.stats.genes} genes · ${graphData.stats.overlap_genes} CHD+NDD overlap · ` +
+      `Showing ${nCount.toLocaleString()} nodes (${geneCount} genes` +
+      (phenoCount > 0 ? `, ${phenoCount} phenotypes` : '') +
+      `) · ${eCount.toLocaleString()} edges  ·  ` +
       `${graphData.stats.variants.toLocaleString()} ClinVar variants available (toggle above)`;
   }, 50);
 }
